@@ -14,8 +14,7 @@ class MyApp extends StatelessWidget {
         body: Center(
           child: Dock(
             items: const [
-              Icons.person
-              ,
+              Icons.person,
               Icons.message,
               Icons.call,
               Icons.camera,
@@ -121,10 +120,10 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 300),
     );
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.5).animate(
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
   }
@@ -134,9 +133,9 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
     super.didUpdateWidget(oldWidget);
 
     if (widget.isHovered) {
-      _controller.animateTo(1.0); // Scale to maximum
+      _controller.animateTo(0.5); // Scale to maximum
     } else if (widget.isAdjacentHovered) {
-      _controller.animateTo(0.8); // Scale to slightly enlarged
+      _controller.animateTo(0.5); // Scale to slightly enlarged
     } else {
       _controller.animateBack(0.0); // Scale back to normal
     }
@@ -150,20 +149,23 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = Colors.primaries[widget.icon.hashCode % Colors.primaries.length];
+    final iconColor =
+        Colors.primaries[widget.icon.hashCode % Colors.primaries.length];
 
     return MouseRegion(
-      onEnter: (_) => widget.onHover(true),
+      onEnter: (_) {
+        widget.onHover(true);
+      },
       onExit: (_) => widget.onHover(false),
-      child: LongPressDraggable<int>(
+      child: Draggable<int>(
         data: widget.index,
         feedback: Transform.scale(
-          scale: _scaleAnimation.value * 1.5,
+          scale: _scaleAnimation.value * 1,
           child: _buildIconContainer(iconColor, scale: _scaleAnimation.value),
         ),
         childWhenDragging: Opacity(
           opacity: 0.3,
-          child: _buildIconContainer(iconColor, scale: 1.0),
+          child: _buildIconContainer(iconColor, scale: 0),
         ),
         onDragCompleted: () {},
         child: DragTarget<int>(
@@ -171,7 +173,8 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
             return AnimatedBuilder(
               animation: _scaleAnimation,
               builder: (context, child) {
-                return _buildIconContainer(iconColor, scale: _scaleAnimation.value);
+                return _buildIconContainer(iconColor,
+                    scale: _scaleAnimation.value);
               },
             );
           },
