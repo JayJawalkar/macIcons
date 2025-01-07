@@ -40,14 +40,15 @@ class Dock extends StatefulWidget {
 }
 
 class _DockState extends State<Dock> {
-  late List<IconData> items;
+  late List<IconData> items; //List containing all icons
   int? hoveredIndex;
   int? draggingIndex;
+  Offset? draggingOffset;
 
   @override
   void initState() {
     super.initState();
-    items = List.of(widget.items);
+    items = List.of(widget.items); //Icons initialized
   }
 
   @override
@@ -61,6 +62,7 @@ class _DockState extends State<Dock> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        //Generate list of icons
         children: List.generate(
           items.length,
           (index) => AnimatedDraggableIcon(
@@ -147,6 +149,7 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
     );
   }
 
+  ///Meathod used  to check if state is changed
   @override
   void didUpdateWidget(covariant AnimatedDraggableIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -175,14 +178,15 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
       onEnter: (_) => widget.onHover(true),
       onExit: (_) => widget.onHover(false),
       child: Draggable<int>(
-        data: widget.index,
+        data: widget
+            .index, // Function in Draggable class that takes index of icons
         feedback: Transform.scale(
           scale: 1.2,
           child: _buildIconContainer(iconColor, scale: 1.1),
         ),
         onDragStarted: () => widget.onDragStart(widget.index),
         onDragEnd: (_) => widget.onDragEnd(),
-        // If the widget is dragging, it takes up less space (20x20).
+        //if widget is dragging then leave space of 20 pixels in height and width
         childWhenDragging: widget.isDragging
             ? const SizedBox(height: 20, width: 20)
             : AnimatedBuilder(
@@ -210,18 +214,22 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
             );
           },
           onLeave: (data) {
-            data == widget.index; // Handle leave event
+            data == (widget.onDragEnd);
           },
-          onMove: (data) => data == widget.index, // Move event on target
+          onMove: (data) => widget.onHover,
           onWillAccept: (data) => data != widget.index,
           onAccept: (data) {
-            widget.onReorder(data, widget.index); // Reorder logic
+            // Update the list when the item is accepted
+            widget.onReorder(data, widget.index);
           },
         ),
       ),
     );
   }
 
+  ///Widget that buils an Container to store and display all the Icons
+  ///
+  ///All the required values and UI compoents are passed
   Widget _buildIconContainer(Color color, {required double scale}) {
     return Container(
       width: 45 * scale,
