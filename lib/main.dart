@@ -42,11 +42,12 @@ class Dock extends StatefulWidget {
 class _DockState extends State<Dock> {
   late List<IconData> items;
   int? hoveredIndex;
+  int? draggingIndex;
 
   @override
   void initState() {
     super.initState();
-    items = List.of(widget.items); // Copy to ensure immutability
+    items = List.of(widget.items);
   }
 
   @override
@@ -69,6 +70,7 @@ class _DockState extends State<Dock> {
             isHovered: hoveredIndex == index,
             isAdjacentHovered: hoveredIndex != null &&
                 (index == hoveredIndex! - 1 || index == hoveredIndex! + 1),
+            isDragging: draggingIndex == index,
             onHover: (isHovering) {
               setState(() {
                 hoveredIndex = isHovering ? index : null;
@@ -79,6 +81,16 @@ class _DockState extends State<Dock> {
                 if (newIndex > oldIndex) newIndex -= 1;
                 final item = items.removeAt(oldIndex);
                 items.insert(newIndex, item);
+              });
+            },
+            onDragStart: (index) {
+              setState(() {
+                draggingIndex = index;
+              });
+            },
+            onDragEnd: () {
+              setState(() {
+                draggingIndex = null;
               });
             },
           ),
@@ -93,8 +105,11 @@ class AnimatedDraggableIcon extends StatefulWidget {
   final int index;
   final bool isHovered;
   final bool isAdjacentHovered;
+  final bool isDragging;
   final Function(bool) onHover;
   final Function(int oldIndex, int newIndex) onReorder;
+  final Function(int index) onDragStart;
+  final VoidCallback onDragEnd;
 
   const AnimatedDraggableIcon({
     super.key,
@@ -102,8 +117,11 @@ class AnimatedDraggableIcon extends StatefulWidget {
     required this.index,
     required this.isHovered,
     required this.isAdjacentHovered,
+    required this.isDragging,
     required this.onHover,
     required this.onReorder,
+    required this.onDragStart,
+    required this.onDragEnd,
   });
 
   @override
@@ -119,12 +137,13 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
   void initState() {
     super.initState();
     _controller = AnimationController(
+      animationBehavior: AnimationBehavior.preserve,
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 450),
     );
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.4).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.ease),
     );
   }
 
@@ -133,11 +152,11 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
     super.didUpdateWidget(oldWidget);
 
     if (widget.isHovered) {
-      _controller.animateTo(0.5); // Scale to maximum
+      _controller.forward();
     } else if (widget.isAdjacentHovered) {
-      _controller.animateTo(0.5); // Scale to slightly enlarged
+      _controller.animateTo(0.5, curve: Curves.ease);
     } else {
-      _controller.animateBack(0.0); // Scale back to normal
+      _controller.reverse();
     }
   }
 
@@ -153,34 +172,50 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
         Colors.primaries[widget.icon.hashCode % Colors.primaries.length];
 
     return MouseRegion(
-      onEnter: (_) {
-        widget.onHover(true);
-      },
+      onEnter: (_) => widget.onHover(true),
       onExit: (_) => widget.onHover(false),
       child: Draggable<int>(
         data: widget.index,
         feedback: Transform.scale(
-          scale: _scaleAnimation.value * 1,
-          child: _buildIconContainer(iconColor, scale: _scaleAnimation.value),
+          scale: 1.2,
+          child: _buildIconContainer(iconColor, scale: 1.1),
         ),
-        childWhenDragging: Opacity(
-          opacity: 0.3,
-          child: _buildIconContainer(iconColor, scale: 0),
-        ),
-        onDragCompleted: () {},
+        onDragStarted: () => widget.onDragStart(widget.index),
+        onDragEnd: (_) => widget.onDragEnd(),
+        // If the widget is dragging, it takes up less space (20x20).
+        childWhenDragging: widget.isDragging
+            ? const SizedBox(height: 20, width: 20)
+            : AnimatedBuilder(
+                animation: _scaleAnimation,
+                builder: (context, child) {
+                  return _buildIconContainer(
+                    iconColor,
+                    scale: _scaleAnimation.value,
+                  );
+                },
+              ),
         child: DragTarget<int>(
           builder: (context, candidateData, rejectedData) {
             return AnimatedBuilder(
-              animation: _scaleAnimation,
+              animation: _scaleAnimation.drive(
+                AlignmentTween(
+                  begin: Alignment.center,
+                  end: Alignment.center,
+                ),
+              ),
               builder: (context, child) {
                 return _buildIconContainer(iconColor,
                     scale: _scaleAnimation.value);
               },
             );
           },
+          onLeave: (data) {
+            data == widget.index; // Handle leave event
+          },
+          onMove: (data) => data == widget.index, // Move event on target
           onWillAccept: (data) => data != widget.index,
           onAccept: (data) {
-            widget.onReorder(data, widget.index);
+            widget.onReorder(data, widget.index); // Reorder logic
           },
         ),
       ),
@@ -189,8 +224,8 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
 
   Widget _buildIconContainer(Color color, {required double scale}) {
     return Container(
-      width: 50 * scale,
-      height: 50 * scale,
+      width: 45 * scale,
+      height: 45 * scale,
       margin: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
