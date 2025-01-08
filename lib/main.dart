@@ -40,59 +40,149 @@ class Dock extends StatefulWidget {
 }
 
 class _DockState extends State<Dock> {
-  late List<IconData> items; //List containing all icons
-  int? hoveredIndex;
-  int? draggingIndex;
-  Offset? draggingOffset;
+  late List<IconData> dockItems;
+  int? hoverIdx;
+  int? dragIdx;
+  int? dropTargetIdx;
+  bool isDraggedOutside = false;
+  List<Offset> dragPositions = [];
+  bool isReturning = false;
 
   @override
   void initState() {
     super.initState();
-    items = List.of(widget.items); //Icons initialized
+    dockItems = List.of(widget.items);
+  }
+
+  double getCenterOffset(int totalItems, int currentIndex, int? draggedIndex) {
+    if (draggedIndex == null) return 0;
+
+    const baseIconWidth = 65.0;
+    const baseIconMargin = 16.0;
+    const itemWidth = baseIconWidth + baseIconMargin;
+    const slideOffset = itemWidth * 0.8; // Reduced from 1.3
+
+    if (hoverIdx != null && dragIdx != null) {
+      if (dragIdx! < hoverIdx!) {
+        if (currentIndex > dragIdx! && currentIndex <= hoverIdx!) {
+          return -slideOffset;
+        }
+      } else if (dragIdx! > hoverIdx!) {
+        if (currentIndex < dragIdx! && currentIndex >= hoverIdx!) {
+          return slideOffset;
+        }
+      }
+    }
+
+    if (isDraggedOutside) {
+      const spreadDistance = itemWidth * 0.4; // Reduced from 0.6
+      if (currentIndex < draggedIndex) {
+        return spreadDistance;
+      } else if (currentIndex > draggedIndex) {
+        return -spreadDistance;
+      }
+    }
+
+    return 0;
+  }
+
+  void _animateReturn() async {
+    if (!mounted) return;
+
+    setState(() {
+      isReturning = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 200)); // Reduced from 300
+
+    if (mounted) {
+      setState(() {
+        dragIdx = null;
+        hoverIdx = null;
+        dropTargetIdx = null;
+        isDraggedOutside = false;
+        isReturning = false;
+        dragPositions.clear();
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 100,
+      height: 140,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         color: Colors.black12,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        //Generate list of icons
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: List.generate(
-          items.length,
-          (index) => AnimatedDraggableIcon(
-            key: ValueKey(items[index]),
-            icon: items[index],
-            index: index,
-            isHovered: hoveredIndex == index,
-            isAdjacentHovered: hoveredIndex != null &&
-                (index == hoveredIndex! - 1 || index == hoveredIndex! + 1),
-            isDragging: draggingIndex == index,
-            onHover: (isHovering) {
+          dockItems.length,
+          (idx) => AnimatedDraggableIcon(
+            key: ValueKey(dockItems[idx]),
+            icon: dockItems[idx],
+            index: idx,
+            totalItems: dockItems.length,
+            isHovered: hoverIdx == idx,
+            isAdjacentToActive: hoverIdx != null &&
+                (idx == hoverIdx! - 1 || idx == hoverIdx! + 1),
+            isDragging: dragIdx == idx,
+            isDropTarget: dropTargetIdx == idx,
+            isDraggedOutside: isDraggedOutside && dragIdx != idx,
+            draggedIndex: dragIdx,
+            isReturning: isReturning && dragIdx == idx,
+            dragPositions: dragPositions,
+            getCenterOffset: getCenterOffset,
+            onHover: (hovering) {
               setState(() {
-                hoveredIndex = isHovering ? index : null;
+                hoverIdx = hovering ? idx : null;
+                if (dragIdx != null && hovering) {
+                  dropTargetIdx = idx;
+                }
               });
             },
-            onReorder: (oldIndex, newIndex) {
+            onReorder: (oldIdx, newIdx) {
               setState(() {
-                if (newIndex > oldIndex) newIndex -= 1;
-                final item = items.removeAt(oldIndex);
-                items.insert(newIndex, item);
+                if (newIdx > oldIdx) newIdx--;
+                final item = dockItems.removeAt(oldIdx);
+                dockItems.insert(newIdx, item);
+                dropTargetIdx = null;
+                dragPositions.clear();
               });
             },
-            onDragStart: (index) {
+            onDragStart: (idx) {
               setState(() {
-                draggingIndex = index;
+                dragIdx = idx;
+                isDraggedOutside = false;
+                isReturning = false;
+                dragPositions.clear();
               });
             },
-            onDragEnd: () {
+            onDragEnd: (details) {
+              if (dragIdx != null && dropTargetIdx == null) {
+                _animateReturn();
+              } else {
+                setState(() {
+                  dragIdx = null;
+                  hoverIdx = null;
+                  dropTargetIdx = null;
+                  isDraggedOutside = false;
+                  dragPositions.clear();
+                });
+              }
+            },
+            onDragUpdate: (draggedIdx, isOutside, position) {
               setState(() {
-                draggingIndex = null;
+                isDraggedOutside = isOutside;
+                if (!isOutside) {
+                  dropTargetIdx = draggedIdx;
+                } else {
+                  dropTargetIdx = null;
+                }
+                dragPositions.add(position);
               });
             },
           ),
@@ -105,25 +195,42 @@ class _DockState extends State<Dock> {
 class AnimatedDraggableIcon extends StatefulWidget {
   final IconData icon;
   final int index;
+  final int totalItems;
   final bool isHovered;
-  final bool isAdjacentHovered;
+  final bool isAdjacentToActive;
   final bool isDragging;
+  final bool isDropTarget;
+  final bool isDraggedOutside;
+  final int? draggedIndex;
+  final bool isReturning;
+  final List<Offset> dragPositions;
+  final Function(int totalItems, int currentIndex, int? draggedIndex)
+      getCenterOffset;
   final Function(bool) onHover;
-  final Function(int oldIndex, int newIndex) onReorder;
-  final Function(int index) onDragStart;
-  final VoidCallback onDragEnd;
+  final Function(int oldIdx, int newIdx) onReorder;
+  final Function(int idx) onDragStart;
+  final Function(DraggableDetails details) onDragEnd;
+  final Function(int idx, bool isOutside, Offset position) onDragUpdate;
 
   const AnimatedDraggableIcon({
     super.key,
     required this.icon,
     required this.index,
+    required this.totalItems,
     required this.isHovered,
-    required this.isAdjacentHovered,
+    required this.isAdjacentToActive,
     required this.isDragging,
+    required this.isDropTarget,
+    required this.isDraggedOutside,
+    required this.draggedIndex,
+    required this.isReturning,
+    required this.dragPositions,
+    required this.getCenterOffset,
     required this.onHover,
     required this.onReorder,
     required this.onDragStart,
     required this.onDragEnd,
+    required this.onDragUpdate,
   });
 
   @override
@@ -132,40 +239,41 @@ class AnimatedDraggableIcon extends StatefulWidget {
 
 class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
+  late AnimationController animationController;
+  late Animation<double> scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      animationBehavior: AnimationBehavior.preserve,
+    animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 300), // Reduced from 400
+      animationBehavior: AnimationBehavior.preserve,
     );
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.4).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.ease),
+    scaleAnimation = Tween<double>(begin: 1, end: 1.24).animate(
+      // Reduced from 1.5
+      CurvedAnimation(
+        parent: animationController,
+        curve: Curves.easeOutQuart, // Changed from easeInOut for smoother feel
+      ),
     );
   }
 
-  ///Meathod used  to check if state is changed
   @override
   void didUpdateWidget(covariant AnimatedDraggableIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.isHovered) {
-      _controller.forward();
-    } else if (widget.isAdjacentHovered) {
-      _controller.animateTo(0.5, curve: Curves.ease);
+    if (widget.isHovered || widget.isDropTarget || widget.isAdjacentToActive) {
+      animationController.forward();
     } else {
-      _controller.reverse();
+      animationController.reverse();
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    animationController.dispose();
     super.dispose();
   }
 
@@ -178,72 +286,109 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
       onEnter: (_) => widget.onHover(true),
       onExit: (_) => widget.onHover(false),
       child: Draggable<int>(
-        data: widget
-            .index, // Function in Draggable class that takes index of icons
+        data: widget.index,
         feedback: Transform.scale(
-          scale: 1.2,
-          child: _buildIconContainer(iconColor, scale: 1.1),
+          scale: 1.1, // Reduced from 1.2
+          child: _buildIcon(iconColor, scale: 1.09), // Reduced from 1.1
         ),
-        onDragStarted: () => widget.onDragStart(widget.index),
-        onDragEnd: (_) => widget.onDragEnd(),
-        //if widget is dragging then leave space of 20 pixels in height and width
-        childWhenDragging: widget.isDragging
-            ? const SizedBox(height: 20, width: 20)
-            : AnimatedBuilder(
-                animation: _scaleAnimation,
-                builder: (context, child) {
-                  return _buildIconContainer(
-                    iconColor,
-                    scale: _scaleAnimation.value,
-                  );
-                },
-              ),
+        onDragStarted: () {
+          widget.onDragStart(widget.index);
+          animationController.animateTo(0.0, curve: Curves.easeOutQuart);
+        },
+        onDragEnd: widget.onDragEnd,
+        onDragUpdate: (details) {
+          final RenderBox box = context.findRenderObject() as RenderBox;
+          final localPosition = box.globalToLocal(details.globalPosition);
+
+          final isOutside = !Rect.fromLTWH(
+            -box.size.width,
+            -box.size.height,
+            box.size.width * 3,
+            box.size.height * 3,
+          ).contains(localPosition);
+
+          widget.onDragUpdate(widget.index, isOutside, localPosition);
+        },
+        childWhenDragging: const SizedBox(width: 50, height: 50),
         child: DragTarget<int>(
           builder: (context, candidateData, rejectedData) {
-            return AnimatedBuilder(
-              animation: _scaleAnimation.drive(
-                AlignmentTween(
-                  begin: Alignment.center,
-                  end: Alignment.center,
-                ),
-              ),
+            final centerOffset = widget.getCenterOffset(
+              widget.totalItems,
+              widget.index,
+              widget.draggedIndex,
+            );
+
+            Widget child = AnimatedBuilder(
+              animation: scaleAnimation,
               builder: (context, child) {
-                return _buildIconContainer(iconColor,
-                    scale: _scaleAnimation.value);
+                return Container(
+                  padding: const EdgeInsets.all(9),
+                  child: _buildIcon(iconColor, scale: scaleAnimation.value),
+                );
+              },
+            );
+
+            if (widget.isReturning && widget.dragPositions.isNotEmpty) {
+              final position =
+                  widget.dragPositions[widget.dragPositions.length - 1];
+              child = TweenAnimationBuilder<Offset>(
+                tween: Tween<Offset>(
+                  begin: position,
+                  end: Offset.zero,
+                ),
+                duration: const Duration(milliseconds: 300), // Reduced from 300
+                curve: Curves.easeOutQuart, // Changed from easeOutCubic
+                builder: (context, offset, child) {
+                  return Transform.translate(
+                    offset: offset,
+                    child: child,
+                  );
+                },
+                child: child,
+              );
+            }
+
+            return TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: centerOffset),
+              duration: const Duration(milliseconds: 400), // Reduced from 400
+              curve: Curves.easeOutQuart, // Changed from easeInOut
+              builder: (context, offset, _) {
+                return Transform.translate(
+                  offset: Offset(offset / 2.1, 1.1),
+                  child: child,
+                );
               },
             );
           },
-          onLeave: (data) {
-            data == (widget.onDragEnd);
-          },
-          onMove: (data) => widget.onHover,
           onWillAccept: (data) => data != widget.index,
-          onAccept: (data) {
-            // Update the list when the item is accepted
-            widget.onReorder(data, widget.index);
-          },
+          onAccept: (data) => widget.onReorder(data, widget.index),
         ),
       ),
     );
   }
 
-  ///Widget that buils an Container to store and display all the Icons
-  ///
-  ///All the required values and UI compoents are passed
-  Widget _buildIconContainer(Color color, {required double scale}) {
+  Widget _buildIcon(Color color, {required double scale}) {
     return Container(
-      width: 45 * scale,
-      height: 45 * scale,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
+      width: 50 * scale,
+      height: 50 * scale,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: color,
+        color: widget.isDropTarget ? color.withOpacity(0.3) : color,
+        boxShadow: widget.isDropTarget || widget.isHovered
+            ? [
+                BoxShadow(
+                  color: color.withOpacity(0.2), // Reduced from 0.3
+                  blurRadius: 6, // Reduced from 8
+                  spreadRadius: 2, // Reduced from 4
+                )
+              ]
+            : null,
       ),
       child: Center(
         child: Icon(
           widget.icon,
           color: Colors.white,
-          size: 24 * scale,
+          size: 28 * scale,
         ),
       ),
     );
