@@ -11,16 +11,24 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        body: Center(
-          child: Dock(
-            items: const [
-              Icons.person,
-              Icons.message,
-              Icons.call,
-              Icons.camera,
-              Icons.photo,
-            ],
-          ),
+        body: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Center(
+              child: instructionText(),
+            ),
+            Center(
+              child: Dock(
+                items: const [
+                  Icons.person,
+                  Icons.message,
+                  Icons.call,
+                  Icons.camera,
+                  Icons.photo,
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -60,26 +68,40 @@ class _DockState extends State<Dock> {
     const baseIconWidth = 65.0;
     const baseIconMargin = 16.0;
     const itemWidth = baseIconWidth + baseIconMargin;
-    const slideOffset = itemWidth * 0.5; // Reduced from 1.3
+    const maxSpacing =
+        itemWidth * 1.5; // Maximum space between icons when dragging
 
     if (hoverIdx != null && dragIdx != null) {
+      // Calculate relative position from the drag point
+      int distanceFromHover = (currentIndex - hoverIdx!).abs();
+
+      // Direction of movement (-1 for left, 1 for right)
+
       if (dragIdx! < hoverIdx!) {
         if (currentIndex > dragIdx! && currentIndex <= hoverIdx!) {
-          return -slideOffset;
+          // Create a cascading effect where icons closer to the hover point move more
+          double scaleFactor = 1 - (distanceFromHover / (hoverIdx! - dragIdx!));
+          return -maxSpacing * scaleFactor;
         }
       } else if (dragIdx! > hoverIdx!) {
         if (currentIndex < dragIdx! && currentIndex >= hoverIdx!) {
-          return slideOffset;
+          // Create a cascading effect where icons closer to the hover point move more
+          double scaleFactor = 1 - (distanceFromHover / (dragIdx! - hoverIdx!));
+          return maxSpacing * scaleFactor;
         }
       }
     }
 
+    // Handle spreading when dragged outside
     if (isDraggedOutside) {
-      const spreadDistance = itemWidth * 0.4; // Reduced from 0.6
-      if (currentIndex < draggedIndex) {
-        return spreadDistance;
-      } else if (currentIndex > draggedIndex) {
-        return -spreadDistance;
+      int distanceFromDrag = (currentIndex - dragIdx!).abs();
+      double spreadFactor =
+          1 / (distanceFromDrag + 1); // Decrease spread for distant icons
+
+      if (currentIndex < dragIdx!) {
+        return maxSpacing * 0.5 * spreadFactor;
+      } else if (currentIndex > dragIdx!) {
+        return -maxSpacing * 0.6 * spreadFactor;
       }
     }
 
@@ -118,7 +140,7 @@ class _DockState extends State<Dock> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: List.generate(
           dockItems.length,
           (idx) => AnimatedDraggableIcon(
@@ -291,7 +313,7 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
       child: Draggable<int>(
         data: widget.index,
         feedback: Transform.scale(
-          scale: 1.1,
+          scale: 1.2,
           child: _buildIcon(iconColor, scale: 1.05),
         ),
         onDragStarted: () {
@@ -312,7 +334,7 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
 
           widget.onDragUpdate(widget.index, isOutside, localPosition);
         },
-        childWhenDragging: const SizedBox(width: 50, height: 50),
+        childWhenDragging: const SizedBox(width: 35, height: 35),
         child: DragTarget<int>(
           builder: (context, candidateData, rejectedData) {
             final centerOffset = widget.getCenterOffset(
@@ -324,9 +346,13 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
             Widget child = AnimatedBuilder(
               animation: scaleAnimation,
               builder: (context, child) {
-                return Container(
-                  padding: const EdgeInsets.all(8),
-                  child: _buildIcon(iconColor, scale: scaleAnimation.value),
+                return Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(25),
+                      child: _buildIcon(iconColor, scale: scaleAnimation.value),
+                    ),
+                  ],
                 );
               },
             );
@@ -353,7 +379,7 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
 
             return TweenAnimationBuilder<double>(
               tween: Tween<double>(begin: 0, end: centerOffset),
-              duration: const Duration(milliseconds: 400),
+              duration: const Duration(milliseconds: 300),
               curve: Curves.linearToEaseOut,
               builder: (context, offset, _) {
                 return Transform.translate(
@@ -401,4 +427,99 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
       ),
     );
   }
+}
+
+Widget instructionText() {
+  return Column(
+    children: [
+      Text(
+        "INSTRUCTIONS",
+        style: TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+          fontSize: 20,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: RichText(
+          text: TextSpan(
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black87,
+            ),
+            children: [
+              const TextSpan(
+                text:
+                    "\n1. The Mouse Pointer [Cursor] acts as Center and not the hovered icon\n",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const TextSpan(
+                text: "2. Drag an icon to see dynamic spacing effect\n",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              TextSpan(
+                text: "3. When dragging, other icons will ",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                children: [
+                  TextSpan(
+                    text: "move away",
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: " from the cursor\n",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const TextSpan(
+                text: "4. Release to drop the icon in its new position\n",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              TextSpan(
+                text: "5. Icons will ",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                children: [
+                  TextSpan(
+                    text: "automatically rearrange",
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: " based on cursor position",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              TextSpan(
+                text: "\n # The animations might feel fast  ",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                children: [
+                  TextSpan(
+                    text: "automatically rearrange",
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: " drag and drop",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
 }
