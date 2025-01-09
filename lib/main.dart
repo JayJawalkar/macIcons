@@ -60,7 +60,7 @@ class _DockState extends State<Dock> {
     const baseIconWidth = 65.0;
     const baseIconMargin = 16.0;
     const itemWidth = baseIconWidth + baseIconMargin;
-    const slideOffset = itemWidth * 0.8; // Reduced from 1.3
+    const slideOffset = itemWidth * 0.5; // Reduced from 1.3
 
     if (hoverIdx != null && dragIdx != null) {
       if (dragIdx! < hoverIdx!) {
@@ -255,7 +255,8 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
       // Reduced from 1.5
       CurvedAnimation(
         parent: animationController,
-        curve: Curves.easeOutQuart, // Changed from easeInOut for smoother feel
+        curve:
+            Curves.linearToEaseOut, // Changed from easeInOut for smoother feel
       ),
     );
   }
@@ -277,6 +278,8 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
     super.dispose();
   }
 
+  // Inside the _AnimatedDraggableIconState class's build method:
+
   @override
   Widget build(BuildContext context) {
     final iconColor =
@@ -288,12 +291,12 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
       child: Draggable<int>(
         data: widget.index,
         feedback: Transform.scale(
-          scale: 1.1, // Reduced from 1.2
-          child: _buildIcon(iconColor, scale: 1.09), // Reduced from 1.1
+          scale: 1.1,
+          child: _buildIcon(iconColor, scale: 1.05),
         ),
         onDragStarted: () {
           widget.onDragStart(widget.index);
-          animationController.animateTo(0.0, curve: Curves.easeOutQuart);
+          animationController.animateTo(0.0, curve: Curves.linearToEaseOut);
         },
         onDragEnd: widget.onDragEnd,
         onDragUpdate: (details) {
@@ -303,8 +306,8 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
           final isOutside = !Rect.fromLTWH(
             -box.size.width,
             -box.size.height,
-            box.size.width * 3,
-            box.size.height * 3,
+            box.size.width * 2.5,
+            box.size.height * 2.5,
           ).contains(localPosition);
 
           widget.onDragUpdate(widget.index, isOutside, localPosition);
@@ -322,7 +325,7 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
               animation: scaleAnimation,
               builder: (context, child) {
                 return Container(
-                  padding: const EdgeInsets.all(9),
+                  padding: const EdgeInsets.all(8),
                   child: _buildIcon(iconColor, scale: scaleAnimation.value),
                 );
               },
@@ -336,8 +339,8 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
                   begin: position,
                   end: Offset.zero,
                 ),
-                duration: const Duration(milliseconds: 300), // Reduced from 300
-                curve: Curves.easeOutQuart, // Changed from easeOutCubic
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.linearToEaseOut,
                 builder: (context, offset, child) {
                   return Transform.translate(
                     offset: offset,
@@ -350,8 +353,8 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
 
             return TweenAnimationBuilder<double>(
               tween: Tween<double>(begin: 0, end: centerOffset),
-              duration: const Duration(milliseconds: 400), // Reduced from 400
-              curve: Curves.easeOutQuart, // Changed from easeInOut
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.linearToEaseOut,
               builder: (context, offset, _) {
                 return Transform.translate(
                   offset: Offset(offset / 2.1, 1.1),
@@ -360,7 +363,12 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
               },
             );
           },
-          onWillAccept: (data) => data != widget.index,
+          onWillAcceptWithDetails: (data) {
+            if (widget.index == widget.totalItems - 1) {
+              return widget.isDropTarget || widget.isDragging;
+            }
+            return data != widget.index;
+          },
           onAccept: (data) => widget.onReorder(data, widget.index),
         ),
       ),
@@ -373,13 +381,13 @@ class _AnimatedDraggableIconState extends State<AnimatedDraggableIcon>
       height: 50 * scale,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: widget.isDropTarget ? color.withOpacity(0.3) : color,
+        color: widget.isDropTarget ? color.withValues() : color,
         boxShadow: widget.isDropTarget || widget.isHovered
             ? [
                 BoxShadow(
                   color: color.withOpacity(0.2), // Reduced from 0.3
-                  blurRadius: 6, // Reduced from 8
-                  spreadRadius: 2, // Reduced from 4
+                  blurRadius: 0.5, // Reduced from 8
+                  spreadRadius: 0.5, // Reduced from 4
                 )
               ]
             : null,
